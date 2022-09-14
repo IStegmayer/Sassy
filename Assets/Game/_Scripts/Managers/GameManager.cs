@@ -43,8 +43,7 @@ public class GameManager : StaticInstance<GameManager>
         // Do some start setup, could be environment, cinematics etc
         // Eventually call ChangeState again with your next state
         AudioSystem.Instance.PlayMusic("swanLake");
-        //TODO: delete this, this should be done on sassy instantiating
-        ChangeState(GameState.Playing);
+        InstanceSassy(1);
     }
 
     private void HandleGameOver()
@@ -53,6 +52,7 @@ public class GameManager : StaticInstance<GameManager>
 
     private void HandlePlaying()
     {
+        Debug.Log("Playing");
     }
 
     public void PlayerDeath(int id)
