@@ -3,7 +3,10 @@ guid: 0c3ad53f38899e74b8f856ea9da8ac46
 MonoImporter:
   externalObjects: {}
   serializedVersion: 2
-  defaultReferences: []
+  defaultReferences:
+  - _sassyPrefab: {fileID: 4276703692154838633, guid: d29dbed9486f7394085d0fdf2775dd7b,
+      type: 3}
+  - _spawnPoint: {instanceID: 0}
   executionOrder: 0
   icon: {instanceID: 0}
   userData: 

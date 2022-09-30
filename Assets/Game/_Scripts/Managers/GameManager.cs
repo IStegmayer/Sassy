@@ -62,7 +62,7 @@ public class GameManager : StaticInstance<GameManager>
 
     private void InstanceSassy(int lvl)
     {
-        GameObject sassyInstance = Instantiate(_sassyPrefab, _spawnPoint.position, Quaternion.identity);
+        GameObject sassyInstance = Instantiate(_sassyPrefab, _spawnPoint.position, _spawnPoint.rotation);
         //NOTE: this is for testing, will have to add a start button
         if (sassyInstance) ChangeState(GameState.Playing);
     }
