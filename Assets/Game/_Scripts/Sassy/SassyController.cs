@@ -1,6 +1,7 @@
 ﻿using System;
 using UnityEngine;
 using UnityEngine.InputSystem;
+using Game._Scripts.Sassy;
 
 namespace Game._Scripts.Sassy
 {
@@ -10,6 +11,7 @@ namespace Game._Scripts.Sassy
         [SerializeField] private float _maxLaunchSpeed;
         [SerializeField] private float _maxChargeTime;
         [SerializeField] private float _ricoBoost;
+        [SerializeField] private float _drag;
 
         private float _turnSmoothTime = 0.05f;
         private float turnSmoothVelocity;
@@ -18,11 +20,17 @@ namespace Game._Scripts.Sassy
         private Animator _animator;
         private float _startChargeTime = 0;
         private float _chargeTime = 0;
+        private float _currentSpeed = 0;
         private float _scale = Constants.BASE_SCALE;
         private bool _keyDown = false;
         private bool _keyUp = false;
         private bool _windslashDown = false;
+        private Vector2 _launchDirection;
+
         private int _id;
+
+        // TODO: this is the best way?
+        private GameObject _meshesContainer;
 
         private enum PlayerStates
         {
@@ -30,20 +38,25 @@ namespace Game._Scripts.Sassy
             Charging,
             Slashing,
             Walking,
-            Idle
+            Idle,
+            Stunned
         }
 
         private PlayerStates _playerState = PlayerStates.Idle;
 
-        private enum AnimProperties
+        private static class AnimStates
         {
-            IsIdle = 0,
-            IsCharging = 1,
-            IsLaunching = 2,
-            IsSlashing = 3
+            public static readonly string idle = "Idle";
+            public static readonly string walking = "Walking";
+            public static readonly string charging = "Charging";
+            public static readonly string launching = "Launching";
+            public static readonly string slashing = "Slashing";
+            public static readonly string stunned = "Stunned";
         }
 
-        private AnimProperties _animState = AnimProperties.IsIdle;
+        private string _animState = AnimStates.idle;
+        private bool _crashed;
+        private SassyAnimator _sassyAnimator;
 
         private static class Constants
         {
@@ -54,7 +67,10 @@ namespace Game._Scripts.Sassy
         {
             _rigidbody = GetComponent<Rigidbody>();
             _animator = GetComponent<Animator>();
-            SetPlayerState(PlayerStates.Idle, AnimProperties.IsIdle);
+            _sassyAnimator = GetComponent<SassyAnimator>();
+            // TODO: this is the best way?
+            _meshesContainer = transform.Find("Meshes").gameObject;
+            SetPlayerState(PlayerStates.Idle, AnimStates.idle);
         }
 
         void Update()
@@ -73,7 +89,9 @@ namespace Game._Scripts.Sassy
             if (_keyDown)
             {
                 _startChargeTime = Time.time;
-                SetPlayerState(PlayerStates.Charging, AnimProperties.IsCharging);
+                SetPlayerState(PlayerStates.Charging, AnimStates.charging);
+
+                AudioSystem.Instance.PlaySound("charge", transform.position);
                 _rigidbody.velocity = Vector2.zero;
                 _keyDown = false;
             }
@@ -87,10 +105,10 @@ namespace Game._Scripts.Sassy
                     _chargeTime = _maxChargeTime;
                 }
 
-                float launchSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed;
-                _rigidbody.velocity +=
-                    new Vector3(_movementInput.x * launchSpeed, 0.0f, _movementInput.y * launchSpeed);
-                SetPlayerState(PlayerStates.Launching, AnimProperties.IsLaunching);
+                _currentSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed;
+                _launchDirection = _movementInput;
+                SetPlayerState(PlayerStates.Launching, AnimStates.launching);
+                AudioSystem.Instance.PlaySound("launch", transform.position);
                 _keyUp = false;
             }
 
@@ -103,28 +121,46 @@ namespace Game._Scripts.Sassy
                 }
             }
 
+            if (_playerState == PlayerStates.Stunned && _currentSpeed >= 0.0f)
+            {
+                _currentSpeed -= _drag;
+                var position = _rigidbody.position;
+                var backwards = transform.forward * -1.0f;
+                position.x += backwards.x * _currentSpeed * Time.deltaTime;
+                position.z += backwards.z * _currentSpeed * Time.deltaTime;
+                _rigidbody.MovePosition(position);
+            }
+
             if (_playerState == PlayerStates.Launching || _playerState == PlayerStates.Slashing)
             {
                 Launch();
             }
-            else if (_playerState == PlayerStates.Idle)
+            else if ((_playerState == PlayerStates.Idle || _playerState == PlayerStates.Walking) && !_crashed)
             {
-                _rigidbody.velocity = Vector3.zero;
                 if (_movementInput.magnitude >= 0.1f)
                 {
                     // we pass x first so we get a clockwise rotation
                     float targetAngle = Mathf.Atan2(_movementInput.x, _movementInput.y) * Mathf.Rad2Deg;
                     float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothVelocity,
                         _turnSmoothTime);
-                    transform.rotation = Quaternion.Euler(0f, angle, 0f);
+                    _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
+                    SetPlayerState(PlayerStates.Walking, AnimStates.walking);
                 }
-                
-                Vector3 position = _rigidbody.position;
+
+                var position = _rigidbody.position;
                 position.x += _movementInput.x * _speed * Time.deltaTime;
                 position.z += _movementInput.y * _speed * Time.deltaTime;
                 _rigidbody.MovePosition(position);
-
             }
+        }
+
+        private void RestartCrash()
+        {
+            _crashed = false;
+            _chargeTime = 0.0f;
+            _scale = Constants.BASE_SCALE;
+            transform.localScale = new Vector3(_scale, _scale, _scale);
+            SetPlayerState(PlayerStates.Idle, AnimStates.idle);
         }
 
         public void OnMove(InputAction.CallbackContext context)
@@ -149,40 +185,74 @@ namespace Game._Scripts.Sassy
 
         void Launch()
         {
-            if (_rigidbody.velocity.magnitude < _speed * 2)
+            if (_currentSpeed >= 0.0f && !_crashed)
             {
+                _currentSpeed -= _drag;
+                var pos = transform.position;
+                _rigidbody.MovePosition(new Vector3(pos.x + _launchDirection.x * _currentSpeed * Time.deltaTime,
+                    pos.y, pos.z + _launchDirection.y * _currentSpeed * Time.deltaTime));
                 _startChargeTime = 0.0f;
+            }
+            else
+            {
+                _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.SassyMesh);
                 _chargeTime = 0.0f;
                 _scale = Constants.BASE_SCALE;
                 transform.localScale = new Vector3(_scale, _scale, _scale);
-                SetPlayerState(PlayerStates.Idle, AnimProperties.IsIdle);
+                SetPlayerState(PlayerStates.Idle, AnimStates.idle);
             }
         }
 
         void WindSlash()
         {
             AudioSystem.Instance.PlaySound("windSlash", transform.position);
-            SetPlayerState(PlayerStates.Slashing, AnimProperties.IsSlashing);
+            _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.TwinBlade);
+            SetPlayerState(PlayerStates.Slashing, AnimStates.slashing);
             transform.localScale = new Vector3(Constants.BASE_SCALE, Constants.BASE_SCALE, Constants.BASE_SCALE);
         }
 
         public void EndWindSlash()
         {
-            SetPlayerState(PlayerStates.Launching, AnimProperties.IsLaunching);
+            _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.SassyMesh);
+            SetPlayerState(PlayerStates.Launching, AnimStates.launching);
+        }
+
+        private void OnCollisionEnter(Collision collision)
+        {
+            if (_playerState == PlayerStates.Slashing)
+            {
+                if (collision.gameObject.CompareTag("Wall"))
+                {
+                    AudioSystem.Instance.PlaySound("good", transform.position);
+                    _launchDirection *= -1.0f;
+                    _currentSpeed += _ricoBoost;
+                }
+
+                ResetLaunch();
+            }
+            // else if (_playerState == PlayerStates.Launching)
+            // {
+            //     _currentSpeed = _speed * 3.0f;
+            //     _crashed = true;
+            //     if (_crashed) Invoke(nameof(RestartCrash), 0.5f);
+            //     AudioSystem.Instance.PlaySound("crash", transform.position);
+            //     SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
+            // }
         }
 
         public void ResetLaunch()
         {
-            SetPlayerState(PlayerStates.Launching, AnimProperties.IsSlashing);
+            SetPlayerState(PlayerStates.Launching, AnimStates.slashing);
             transform.localScale = new Vector3(_scale, _scale, _scale);
-            Invoke(nameof(EndWindSlash), 0.2f);
+            Invoke(nameof(EndWindSlash), 0.5f);
         }
 
-        void SetPlayerState(PlayerStates newPlayerState, AnimProperties animProperty)
+        void SetPlayerState(PlayerStates newPlayerState, string animState)
         {
-            _animator.SetInteger("CurrentState", (int) animProperty);
+            // _animator.SetInteger("CurrentState", (int) animState);
+            _animator.Play(animState);
             _playerState = newPlayerState;
-            _animState = animProperty;
+            _animState = animState;
         }
     }
 }
