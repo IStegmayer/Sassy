@@ -14,14 +14,13 @@ namespace Game._Scripts.Sassy
     {
         [SerializeField] private GameObject[] _meshes;
 
-        // private GameObject _meshesContainer;
-
         private void Start()
         {
         }
 
         public void ChangeMeshes(GameObject meshesContainer, int meshId)
         {
+            meshesContainer.transform.rotation = Quaternion.identity;
             Helpers.DestroyChildren(meshesContainer.transform);
             var mesh = _meshes[meshId];
             Instantiate(mesh, meshesContainer.transform.position,

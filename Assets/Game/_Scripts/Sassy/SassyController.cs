@@ -22,11 +22,11 @@ namespace Game._Scripts.Sassy
         private float _chargeTime = 0;
         private float _currentSpeed = 0;
         private float _scale = Constants.BASE_SCALE;
-        private bool _keyDown = false;
-        private bool _keyUp = false;
-        private bool _windslashDown = false;
+        private bool _keyDown;
+        private bool _keyUp;
+        private bool _windslashDown;
+        private bool _collided;
         private Vector2 _launchDirection;
-
         private int _id;
 
         // TODO: this is the best way?
@@ -80,6 +80,7 @@ namespace Game._Scripts.Sassy
         private void FixedUpdate()
         {
             if (GameManager.Instance.State != GameState.Playing) return;
+            Debug.DrawRay(transform.position, transform.TransformDirection(Vector3.forward) * 1000, Color.white);
             if (_windslashDown)
             {
                 WindSlash();
@@ -114,6 +115,14 @@ namespace Game._Scripts.Sassy
 
             if (_playerState == PlayerStates.Charging)
             {
+                if (_movementInput.magnitude >= 0.1f)
+                {
+                    // we pass x first so we get a clockwise rotation
+                    float targetAngle = Mathf.Atan2(_movementInput.x, _movementInput.y) * Mathf.Rad2Deg;
+                    float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothVelocity,
+                        _turnSmoothTime);
+                    _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
+                }
                 if (0.07 < _scale)
                 {
                     _scale = Constants.BASE_SCALE - ((Time.time - _startChargeTime) / _maxChargeTime);
@@ -125,7 +134,7 @@ namespace Game._Scripts.Sassy
             {
                 _currentSpeed -= _drag;
                 var position = _rigidbody.position;
-                var backwards = transform.forward * -1.0f;
+                var backwards = -transform.forward;
                 position.x += backwards.x * _currentSpeed * Time.deltaTime;
                 position.z += backwards.z * _currentSpeed * Time.deltaTime;
                 _rigidbody.MovePosition(position);
@@ -144,13 +153,13 @@ namespace Game._Scripts.Sassy
                     float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref turnSmoothVelocity,
                         _turnSmoothTime);
                     _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
-                    SetPlayerState(PlayerStates.Walking, AnimStates.walking);
                 }
-
+                
                 var position = _rigidbody.position;
                 position.x += _movementInput.x * _speed * Time.deltaTime;
                 position.z += _movementInput.y * _speed * Time.deltaTime;
                 _rigidbody.MovePosition(position);
+                SetPlayerState(PlayerStates.Walking, AnimStates.walking);
             }
         }
 
@@ -209,6 +218,7 @@ namespace Game._Scripts.Sassy
             _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.TwinBlade);
             SetPlayerState(PlayerStates.Slashing, AnimStates.slashing);
             transform.localScale = new Vector3(Constants.BASE_SCALE, Constants.BASE_SCALE, Constants.BASE_SCALE);
+            Invoke(nameof(EndWindSlash), 0.5f);
         }
 
         public void EndWindSlash()
@@ -230,14 +240,20 @@ namespace Game._Scripts.Sassy
 
                 ResetLaunch();
             }
-            // else if (_playerState == PlayerStates.Launching)
-            // {
-            //     _currentSpeed = _speed * 3.0f;
-            //     _crashed = true;
-            //     if (_crashed) Invoke(nameof(RestartCrash), 0.5f);
-            //     AudioSystem.Instance.PlaySound("crash", transform.position);
-            //     SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
-            // }
+            else if (_playerState == PlayerStates.Launching && !_collided)
+            {
+                _currentSpeed = _speed * 3.0f;
+                _crashed = true;
+                if (_crashed) Invoke(nameof(RestartCrash), 0.5f);
+                AudioSystem.Instance.PlaySound("crash", transform.position);
+                SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
+            }
+            _collided = true;
+        }
+
+        private void OnCollisionExit(Collision collision)
+        {
+            _collided = false;
         }
 
         public void ResetLaunch()
