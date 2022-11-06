@@ -27,12 +27,14 @@ namespace Game._Scripts.Sassy
         private Animator _animator;
         private float _startChargeTime;
         private float _chargeTime;
-        private float _currentSpeed;
         private float _scale = Constants.BASE_SCALE;
         private bool _collided;
         private Vector2 _launchDirection;
         private int _id;
         private Vector3 _lastPosition;
+
+        private Vector3 _currentDirection = Vector3.zero;
+        private float _currentSpeed;
 
         private FrameInput _input;
 
@@ -65,6 +67,7 @@ namespace Game._Scripts.Sassy
             _rigidbody = GetComponent<Rigidbody>();
             _animator = GetComponent<Animator>();
             _sassyAnimator = GetComponent<SassyAnimator>();
+            _characterBounds = GetComponent<Collider>().bounds;
             // TODO: this is the best way?
             _meshesContainer = transform.Find("Meshes").gameObject;
             _stateLabel = GameObject.Find("Text (TMP)").GetComponent<StateLabelController>();
@@ -76,8 +79,8 @@ namespace Game._Scripts.Sassy
         void Update() {
             if (GameManager.Instance.State != GameState.Playing) return;
             _stateLabel.SetLabelText(_playerState.ToString());
-            
-            // Calculate velocity
+
+            // Calculate velocity to add juice
             Velocity = (transform.position - _lastPosition) / Time.deltaTime;
             _lastPosition = transform.position;
 
@@ -88,11 +91,11 @@ namespace Game._Scripts.Sassy
             Debug.Log($"collided: {_collided}");
             if (_collided)
                 CalculateCollision();
-            
+
             // Calculate Crash
             // Crash();
             // Calculate Charge
-            Charge();
+            // Charge();
             // Calculate Launch
             // Launch();
             // Calculate Slash
@@ -119,8 +122,11 @@ namespace Game._Scripts.Sassy
         }
 
         #endregion
-        
+
         #region Collisions
+
+        // [Header("COLLISION")] [SerializeField]
+        private Bounds _characterBounds;
 
         private void CalculateCollision() {
             if (_playerState == PlayerStates.Launching) {
@@ -144,19 +150,20 @@ namespace Game._Scripts.Sassy
         #region Crash
 
         private void Crash() {
-            if (_playerState == PlayerStates.Stunned && _currentSpeed >= 0.0f) {
+            if (_playerState != PlayerStates.Stunned) return;
+            if (_collided) {
+                _currentSpeed = _speed * 3.0f;
+                Invoke(nameof(RestartCrash), 0.5f);
+                AudioSystem.Instance.PlaySound("crash", transform.position);
+            }
+
+            if (_currentSpeed >= 0.0f) {
                 _currentSpeed -= _drag;
                 var position = _rigidbody.position;
                 var backwards = -transform.forward;
                 position.x += backwards.x * _currentSpeed * Time.deltaTime;
                 position.z += backwards.z * _currentSpeed * Time.deltaTime;
                 _rigidbody.MovePosition(position);
-            }
-            if (_crashed) {
-                _currentSpeed = _speed * 3.0f;
-                Invoke(nameof(RestartCrash), 0.5f);
-                AudioSystem.Instance.PlaySound("crash", transform.position);
-                SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
             }
         }
 
@@ -178,6 +185,7 @@ namespace Game._Scripts.Sassy
                 SetPlayerState(PlayerStates.Charging, AnimStates.charging);
                 AudioSystem.Instance.PlaySound("charge", transform.position);
             }
+
             if (_playerState == PlayerStates.Charging) {
                 if (_input.MovementXZ.magnitude >= 0.1f) {
                     // we pass x first so we get a clockwise rotation
@@ -192,6 +200,7 @@ namespace Game._Scripts.Sassy
                     transform.localScale = new Vector3(_scale, _scale, _scale);
                 }
             }
+
             if (_input.ChargeUp && _playerState == PlayerStates.Charging) {
                 _chargeTime = Time.time - _startChargeTime;
                 //max launch 3 sec
@@ -211,7 +220,14 @@ namespace Game._Scripts.Sassy
         #region Launch
 
         void Launch() {
-            if (_currentSpeed >= 0.0f && !_crashed) {
+            if (_playerState != PlayerStates.Launching) return;
+
+            if (_collided) {
+                SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
+                return;
+            }
+
+            if (_currentSpeed >= 0.0f) {
                 _currentSpeed -= _drag;
                 var pos = transform.position;
                 _rigidbody.MovePosition(new Vector3(pos.x + _launchDirection.x * _currentSpeed * Time.deltaTime,
@@ -277,24 +293,54 @@ namespace Game._Scripts.Sassy
                     _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
                 }
 
-                var position = _rigidbody.position;
-                position.x += _input.MovementXZ.x * _speed * Time.deltaTime;
-                position.z += _input.MovementXZ.y * _speed * Time.deltaTime;
-                _rigidbody.MovePosition(position);
+                _currentDirection.x = _input.MovementXZ.x;
+                _currentDirection.z = _input.MovementXZ.y;
+                _currentSpeed = _speed;
                 SetPlayerState(PlayerStates.Walking, AnimStates.walking);
-            } else if (_collided) {
-                var position = _rigidbody.position;
+            }
+            else if (_collided) {
                 var backwards = -transform.forward;
-                position.x += backwards.x * _speed * Time.deltaTime;
-                position.z += backwards.z * _speed * Time.deltaTime;
-                _rigidbody.MovePosition(position);
+                _currentDirection.x = backwards.x;
+                _currentDirection.z = backwards.z;
+                _currentSpeed = 1.001f;
             }
         }
 
         #endregion
 
         #region Movement
-        private void MoveSassy() { }
+
+        [Header("MOVE")]
+        [SerializeField, Tooltip("Raising this value increases collision accuracy at the cost of performance.")]
+        private int _freeColliderIterations = 10;
+
+        private void MoveSassy() {
+            var pos = transform.position;
+            var move = _currentDirection * _currentSpeed * Time.deltaTime;
+            var furthestPoint = pos + move;
+            //
+            // // check 
+            // var hits = Physics.OverlapBox(furthestPoint, _characterBounds.size, transform.rotation);
+            // if (!(hits?.Length > 0)) {
+            //     _rigidbody.MovePosition(furthestPoint);
+            //     return;
+            // }
+            //
+            // var posToMoveTo = pos;
+            // for (int i = 1; i < _freeColliderIterations; i++) {
+            //     var t = (float) i / _freeColliderIterations;
+            //     var posToTry = Vector3.Lerp(pos, furthestPoint, t);
+            //
+            //     if (Physics.OverlapBox(furthestPoint, _characterBounds.size, transform.rotation)?.Length > 0)
+            //         return;
+            //
+            //     posToMoveTo = posToTry;
+            // }
+            //
+            // _rigidbody.MovePosition(posToMoveTo);
+
+            _rigidbody.MovePosition(furthestPoint);
+        }
 
         #endregion
 
