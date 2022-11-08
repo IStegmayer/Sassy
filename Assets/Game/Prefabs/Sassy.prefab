@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 3643769563849678606}
   - component: {fileID: 3826929805459011437}
-  - component: {fileID: 3826929805459011434}
   - component: {fileID: 3826929805459011436}
   - component: {fileID: 3826929805459011433}
   - component: {fileID: 3826929805459011432}
@@ -54,19 +53,6 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 116
   m_CollisionDetection: 1
---- !u!65 &3826929805459011434
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4168808990279697844}
-  m_Material: {fileID: 0}
-  m_IsTrigger: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Size: {x: 2.7554553, y: 4.4944353, z: 2.6706033}
-  m_Center: {x: 0.00420446, y: 1.7472177, z: 0.0711524}
 --- !u!95 &3826929805459011436
 Animator:
   serializedVersion: 4
@@ -182,8 +168,9 @@ MonoBehaviour:
   _speed: 2
   _maxLaunchSpeed: 18
   _maxChargeTime: 1
-  _ricoBoost: 15
+  _ricoBoost: 5
   _drag: 0.07
+  _freeColliderIterations: 10
 --- !u!114 &-7634440475619469921
 MonoBehaviour:
   m_ObjectHideFlags: 0
@@ -208,6 +195,7 @@ GameObject:
   serializedVersion: 6
   m_Component:
   - component: {fileID: 8490895432714482243}
+  - component: {fileID: 4832789990744559733}
   m_Layer: 0
   m_Name: Meshes
   m_TagString: Untagged
@@ -231,6 +219,20 @@ Transform:
   m_Father: {fileID: 3643769563849678606}
   m_RootOrder: 0
   m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
+--- !u!136 &4832789990744559733
+CapsuleCollider:
+  m_ObjectHideFlags: 0
+  m_CorrespondingSourceObject: {fileID: 0}
+  m_PrefabInstance: {fileID: 0}
+  m_PrefabAsset: {fileID: 0}
+  m_GameObject: {fileID: 4617054484828777079}
+  m_Material: {fileID: 0}
+  m_IsTrigger: 0
+  m_Enabled: 1
+  m_Radius: 1.526283
+  m_Height: 4.879337
+  m_Direction: 1
+  m_Center: {x: 0, y: 1.6970327, z: 0.087461576}
 --- !u!1001 &6844153288481845367
 PrefabInstance:
   m_ObjectHideFlags: 0
