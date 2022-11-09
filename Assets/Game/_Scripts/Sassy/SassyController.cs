@@ -190,6 +190,7 @@ namespace Game._Scripts.Sassy
                 _currentSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed;
                 _currentDirection.x = _input.MovementXZ.x;
                 _currentDirection.z = _input.MovementXZ.y;
+                _canWindSlash = true;
                 SetPlayerState(PlayerStates.Launching, AnimStates.launching);
                 AudioSystem.Instance.PlaySound("launch", transform.position);
             }
@@ -201,7 +202,6 @@ namespace Game._Scripts.Sassy
 
         void Launch() {
             if (_playerState != PlayerStates.Launching) return;
-            if (_ricocheting) return;
 
             if (_collided) {
                 // we crashed
@@ -225,40 +225,43 @@ namespace Game._Scripts.Sassy
             }
         }
 
-
         #endregion
 
         #region WindSlash
 
+        private bool _canWindSlash;
+        private float _lastWindslash;
+        private float _windSlashDuration = 0.5f;
+
         void WindSlash() {
             if (!(_playerState == PlayerStates.Slashing || _playerState == PlayerStates.Launching)) return;
 
-            if (_collided && _playerState == PlayerStates.Slashing) {
+            // if we collided, ricochet
+            if (_collided && _playerState == PlayerStates.Slashing && !_ricocheting) {
                 _ricocheting = true;
                 _currentDirection *= -1.0f;
                 _currentSpeed += _ricoBoost;
                 AudioSystem.Instance.PlaySound("good", transform.position);
-                ResumeLaunch();
-                return;
             }
 
-            if (_input.WindSlash && _playerState != PlayerStates.Slashing) {
+            // if windSlash is still going, we have nothing to do here.
+            if (Time.time < _lastWindslash + _windSlashDuration) return;
+
+            // cooldown is up, end windSlash and restart cooldown
+            if (_ricocheting) _ricocheting = false;;
+            EndWindSlash();
+
+            // start windslash
+            if (_input.WindSlash) {
+                _lastWindslash = Time.time;
                 AudioSystem.Instance.PlaySound("windSlash", transform.position);
                 _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.TwinBlade);
                 SetPlayerState(PlayerStates.Slashing, AnimStates.slashing);
-                transform.localScale = new Vector3(Constants.BASE_SCALE, Constants.BASE_SCALE, Constants.BASE_SCALE);
-                Invoke(nameof(EndWindSlash), 0.5f);
             }
         }
 
-        private void ResumeLaunch() {
-            SetPlayerState(PlayerStates.Launching, AnimStates.slashing);
-            transform.localScale = new Vector3(_scale, _scale, _scale);
-            Invoke(nameof(EndWindSlash), 0.5f);
-        }
-        
         private void EndWindSlash() {
-            _ricocheting = false;
+            // _canWindSlash = true;
             _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.SassyMesh);
             SetPlayerState(PlayerStates.Launching, AnimStates.launching);
         }
