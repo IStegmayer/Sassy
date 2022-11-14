@@ -6,6 +6,7 @@ public class GameManager : StaticInstance<GameManager>
 {
     [SerializeField] private GameObject _sassyPrefab;
     [SerializeField] private Transform _spawnPoint;
+    [SerializeField] private StateLabelController _stateLabel;
     public static event Action<GameState> OnBeforeStateChanged;
     public static event Action<GameState> OnAfterStateChanged;
     public GameState State { get; private set; }

@@ -85,6 +85,12 @@ MonoBehaviour:
     source: {fileID: 0}
     volume: 0.05
     pitch: 0
+  - name: good
+    loop: 0
+    clip: {fileID: 8300000, guid: 36f18d75131deb54f862f880f602f175, type: 3}
+    source: {fileID: 0}
+    volume: 1
+    pitch: 0
 --- !u!1 &2902517809363162687
 GameObject:
   m_ObjectHideFlags: 0

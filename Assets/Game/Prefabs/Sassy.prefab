@@ -10,7 +10,6 @@ GameObject:
   m_Component:
   - component: {fileID: 3643769563849678606}
   - component: {fileID: 3826929805459011437}
-  - component: {fileID: 3826929805459011434}
   - component: {fileID: 3826929805459011436}
   - component: {fileID: 3826929805459011433}
   - component: {fileID: 3826929805459011432}
@@ -29,7 +28,7 @@ Transform:
   m_PrefabInstance: {fileID: 0}
   m_PrefabAsset: {fileID: 0}
   m_GameObject: {fileID: 4168808990279697844}
-  m_LocalRotation: {x: -0, y: -0.000000081011194, z: -0, w: 1}
+  m_LocalRotation: {x: 0, y: 0, z: 0, w: 1}
   m_LocalPosition: {x: -0.45443797, y: 0.12999916, z: -0.13779259}
   m_LocalScale: {x: 0.17, y: 0.17, z: 0.17}
   m_ConstrainProportionsScale: 1
@@ -37,7 +36,7 @@ Transform:
   - {fileID: 8490895432714482243}
   m_Father: {fileID: 0}
   m_RootOrder: 0
-  m_LocalEulerAnglesHint: {x: 0, y: 180, z: 0}
+  m_LocalEulerAnglesHint: {x: 0, y: 0, z: 0}
 --- !u!54 &3826929805459011437
 Rigidbody:
   m_ObjectHideFlags: 0
@@ -54,19 +53,6 @@ Rigidbody:
   m_Interpolate: 0
   m_Constraints: 116
   m_CollisionDetection: 1
---- !u!65 &3826929805459011434
-BoxCollider:
-  m_ObjectHideFlags: 0
-  m_CorrespondingSourceObject: {fileID: 0}
-  m_PrefabInstance: {fileID: 0}
-  m_PrefabAsset: {fileID: 0}
-  m_GameObject: {fileID: 4168808990279697844}
-  m_Material: {fileID: 0}
-  m_IsTrigger: 0
-  m_Enabled: 1
-  serializedVersion: 2
-  m_Size: {x: 2.7554553, y: 4.4944353, z: 2.6706033}
-  m_Center: {x: 0.00420446, y: 1.7472177, z: 0.0711524}
 --- !u!95 &3826929805459011436
 Animator:
   serializedVersion: 4
@@ -179,10 +165,12 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _speed: 2
-  _maxLaunchSpeed: 18
+  _maxLaunchSpeed: 10
   _maxChargeTime: 1
-  _ricoBoost: 15
+  _ricoBoost: 1.5
   _drag: 0.07
+  _freeColliderIterations: 10
+  _maxSpeed: 15
 --- !u!114 &-7634440475619469921
 MonoBehaviour:
   m_ObjectHideFlags: 0
