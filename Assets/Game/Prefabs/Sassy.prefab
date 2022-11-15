@@ -165,10 +165,15 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   _speed: 2
-  _maxLaunchSpeed: 10
+  _characterBounds:
+    m_Center: {x: 0, y: 0, z: 0}
+    m_Extent: {x: 0, y: 0, z: 0}
+  _crashDuration: 0.5
   _maxChargeTime: 1
-  _ricoBoost: 1.5
-  _drag: 0.07
+  _maxLaunchSpeed: 8
+  _drag: 0.03
+  _windSlashDuration: 0.5
+  _ricoBoost: 2
   _freeColliderIterations: 10
   _maxSpeed: 15
 --- !u!114 &-7634440475619469921

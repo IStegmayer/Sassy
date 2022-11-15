@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Collections;
 using System.Security;
 using UnityEngine;
 using UnityEngine.InputSystem;
@@ -16,17 +17,11 @@ namespace Game._Scripts.Sassy
 
         private StateLabelController _stateLabel;
         [SerializeField] private int _speed;
-        [SerializeField] private float _maxLaunchSpeed;
-        [SerializeField] private float _maxChargeTime;
-        [SerializeField] private float _ricoBoost;
-        [SerializeField] private float _drag;
 
         private float _turnSmoothTime = 0.05f;
         private float _turnSmoothVelocity;
         private Rigidbody _rigidbody;
         private Animator _animator;
-        private float _startChargeTime;
-        private float _chargeTime;
         private float _scale = Constants.BASE_SCALE;
         private bool _collided;
         private int _id;
@@ -57,6 +52,7 @@ namespace Game._Scripts.Sassy
         private bool _ricocheting;
         private SassyAnimator _sassyAnimator;
 
+        // TODO: is this the best way?
         private static class Constants
         {
             public const float BASE_SCALE = 0.17f;
@@ -73,21 +69,18 @@ namespace Game._Scripts.Sassy
             SetPlayerState(PlayerStates.Idle, AnimStates.idle);
         }
 
-        private void FixedUpdate() { }
-
         void Update() {
             if (GameManager.Instance.State != GameState.Playing) return;
             _stateLabel.SetLabelText(_playerState.ToString());
 
             // Calculate velocity to add juice
-            Velocity = (transform.position - _lastPosition) / Time.deltaTime;
-            _lastPosition = transform.position;
+            var pos = transform.position;
+            Velocity = (pos - _lastPosition) / Time.deltaTime;
+            _lastPosition = pos;
 
-            Debug.DrawRay(transform.position, _currentDirection * 1000, Color.white);
+            Debug.DrawRay(pos, _currentDirection * 1000, Color.white);
 
-            // Raycasts and Collisions
-
-            Debug.Log($"collided: {_collided}");
+            // TODO: Manual Raycasts and Collisions
 
             // Calculate Crash
             Crash();
@@ -99,7 +92,9 @@ namespace Game._Scripts.Sassy
             WindSlash();
             //Calculate Walk
             Walk();
+        }
 
+        private void FixedUpdate() {
             // Execute the combined movement
             MoveSassy();
         }
@@ -122,7 +117,7 @@ namespace Game._Scripts.Sassy
 
         #region Collisions
 
-        // [Header("COLLISION")] [SerializeField]
+        [Header("COLLISION")] [SerializeField]
         private Bounds _characterBounds;
 
         private void OnCollisionEnter(Collision collision) {
@@ -130,6 +125,7 @@ namespace Game._Scripts.Sassy
         }
 
         private void OnCollisionExit(Collision collision) {
+            _ricocheting = false;
             _collided = false;
         }
 
@@ -137,15 +133,19 @@ namespace Game._Scripts.Sassy
 
         #region Crash
 
+        [Header("CRASH")] [SerializeField] private float _crashDuration = 0.5f;
+
         private void Crash() {
             if (_playerState != PlayerStates.Stunned) return;
 
-            if (_crashed) Invoke(nameof(RestartCrash), 0.5f);
+            if (_crashed) StartCoroutine(RestartCrash());
 
-            if (_currentSpeed >= 0.0f) Mathf.MoveTowards(_currentSpeed, 0, _drag * Time.deltaTime);
+            if (_currentSpeed >= 0.0f)
+                _currentSpeed = Mathf.MoveTowards(_currentSpeed, 0, _drag * Time.deltaTime);
         }
 
-        private void RestartCrash() {
+        private IEnumerator RestartCrash() {
+            yield return new WaitForSeconds(_crashDuration);
             _crashed = false;
             _chargeTime = 0.0f;
             _scale = Constants.BASE_SCALE;
@@ -157,15 +157,30 @@ namespace Game._Scripts.Sassy
 
         #region Charge
 
-        private void Charge() {
-            if (_input.ChargeDown && (_playerState == PlayerStates.Walking || _playerState == PlayerStates.Idle)) {
-                _startChargeTime = Time.time;
-                _currentSpeed = 0.0f;
-                SetPlayerState(PlayerStates.Charging, AnimStates.charging);
-                AudioSystem.Instance.PlaySound("charge", transform.position);
-            }
+        [Header("CHARGE")] [SerializeField] private float _maxChargeTime;
+        private float _startChargeTime;
+        private float _chargeTime;
 
-            if (_playerState == PlayerStates.Charging) {
+        private void Charge() {
+            if (_playerState != PlayerStates.Charging) return;
+
+            // release charge
+            if (_input.ChargeUp) {
+                _chargeTime = Time.time - _startChargeTime;
+                if (_chargeTime > _maxChargeTime) {
+                    _chargeTime = _maxChargeTime;
+                }
+
+                _startChargeTime = 0.0f;
+                _currentSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed * Time.deltaTime;
+                _currentDirection.x = _input.MovementXZ.x;
+                _currentDirection.z = _input.MovementXZ.y;
+                _canWindSlash = true;
+                SetPlayerState(PlayerStates.Launching, AnimStates.launching);
+                AudioSystem.Instance.PlaySound("launch", transform.position);
+            }
+            // keep up with scale and rotation of charge
+            else {
                 if (_input.MovementXZ.magnitude >= 0.1f) {
                     // we pass x first so we get a clockwise rotation
                     float targetAngle = Mathf.Atan2(_input.MovementXZ.x, _input.MovementXZ.y) * Mathf.Rad2Deg;
@@ -179,26 +194,21 @@ namespace Game._Scripts.Sassy
                     transform.localScale = new Vector3(_scale, _scale, _scale);
                 }
             }
+        }
 
-            if (_input.ChargeUp && _playerState == PlayerStates.Charging) {
-                _chargeTime = Time.time - _startChargeTime;
-                if (_chargeTime > _maxChargeTime) {
-                    _chargeTime = _maxChargeTime;
-                }
-
-                _startChargeTime = 0.0f;
-                _currentSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed  * Time.deltaTime;
-                _currentDirection.x = _input.MovementXZ.x;
-                _currentDirection.z = _input.MovementXZ.y;
-                _canWindSlash = true;
-                SetPlayerState(PlayerStates.Launching, AnimStates.launching);
-                AudioSystem.Instance.PlaySound("launch", transform.position);
-            }
+        private void StartCharge() {
+            _startChargeTime = Time.time;
+            _currentSpeed = 0.0f;
+            SetPlayerState(PlayerStates.Charging, AnimStates.charging);
+            AudioSystem.Instance.PlaySound("charge", transform.position);
         }
 
         #endregion
 
         #region Launch
+
+        [Header("LAUNCH")] [SerializeField] private float _maxLaunchSpeed;
+        [SerializeField] private float _drag;
 
         void Launch() {
             if (_playerState != PlayerStates.Launching) return;
@@ -213,10 +223,14 @@ namespace Game._Scripts.Sassy
                 return;
             }
 
-            if (_currentSpeed >= 0.0f) {
-                Mathf.MoveTowards(_currentSpeed, 0, _drag * Time.deltaTime);
+            // start windSlash
+            if (_input.WindSlash && _canWindSlash) StartCoroutine(ExecuteWindSlash());
+
+            if (_currentSpeed > 0.0f) {
+                _currentSpeed = Mathf.MoveTowards(_currentSpeed, 0, _drag * Time.deltaTime);
             }
             else {
+                _canWindSlash = true;
                 _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.SassyMesh);
                 _chargeTime = 0.0f;
                 _scale = Constants.BASE_SCALE;
@@ -229,39 +243,32 @@ namespace Game._Scripts.Sassy
 
         #region WindSlash
 
+        [Header("WINDSLASH")] 
+        [SerializeField] private float _windSlashDuration;
+        [SerializeField] private float _ricoBoost;
         private bool _canWindSlash;
-        private float _lastWindslash;
-        private float _windSlashDuration = 0.5f;
 
         void WindSlash() {
-            if (!(_playerState == PlayerStates.Slashing || _playerState == PlayerStates.Launching)) return;
+            if (_playerState != PlayerStates.Slashing) return;
 
             // if we collided, ricochet
-            if (_collided && _playerState == PlayerStates.Slashing && !_ricocheting) {
+            if (_collided && !_ricocheting) {
+                _canWindSlash = true;
                 _ricocheting = true;
                 _currentDirection *= -1.0f;
                 _currentSpeed += _ricoBoost * Time.deltaTime;
                 AudioSystem.Instance.PlaySound("good", transform.position);
             }
-
-            // if windSlash is still going, we have nothing to do here.
-            if (Time.time < _lastWindslash + _windSlashDuration) return;
-
-            // cooldown is up, end windSlash and restart cooldown
-            if (_ricocheting) _ricocheting = false;
-            EndWindSlash();
-
-            // start windslash
-            if (_input.WindSlash) {
-                _lastWindslash = Time.time;
-                AudioSystem.Instance.PlaySound("windSlash", transform.position);
-                _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.TwinBlade);
-                SetPlayerState(PlayerStates.Slashing, AnimStates.slashing);
-            }
         }
 
-        private void EndWindSlash() {
-            _canWindSlash = true;
+        private IEnumerator ExecuteWindSlash() {
+            _canWindSlash = false;
+            AudioSystem.Instance.PlaySound("windSlash", transform.position);
+            _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.TwinBlade);
+            SetPlayerState(PlayerStates.Slashing, AnimStates.slashing);
+
+            yield return new WaitForSeconds(_windSlashDuration);
+
             _sassyAnimator.ChangeMeshes(_meshesContainer, (int) MeshIds.SassyMesh);
             SetPlayerState(PlayerStates.Launching, AnimStates.launching);
         }
@@ -272,9 +279,10 @@ namespace Game._Scripts.Sassy
 
         private void Walk() {
             if (!(_playerState == PlayerStates.Idle || _playerState == PlayerStates.Walking)) return;
-            if (_input.MovementXZ.sqrMagnitude < 0.01f) {
-                _currentSpeed = 0;
-                SetPlayerState(PlayerStates.Idle, AnimStates.idle);
+
+            // start charge
+            if (_input.ChargeDown) {
+                StartCharge();
                 return;
             }
 
@@ -290,6 +298,7 @@ namespace Game._Scripts.Sassy
                 _currentSpeed = _speed * Time.deltaTime;
                 SetPlayerState(PlayerStates.Walking, AnimStates.walking);
             }
+            // TODO: this can be vastly improved but works for now
             else {
                 var backwards = -transform.forward;
                 _currentDirection.x = backwards.x;
@@ -305,34 +314,15 @@ namespace Game._Scripts.Sassy
         [Header("MOVE")]
         [SerializeField, Tooltip("Raising this value increases collision accuracy at the cost of performance.")]
         private int _freeColliderIterations = 10;
-
         [SerializeField] private float _maxSpeed;
 
+        // This function is only executing the sum of movement, the idea would be to check for collisions manually
+        // iterating through small steps for better accuracy. We're using OnCollisionEnter for now.
         private void MoveSassy() {
             var pos = transform.position;
-            var clampedSpeed = Mathf.Clamp(_currentSpeed, 0.0f, _maxSpeed * Time.deltaTime);
+            var clampedSpeed = Mathf.Clamp(_currentSpeed, 0.0f, _maxSpeed);
             var move = _currentDirection * clampedSpeed;
             var furthestPoint = pos + move;
-            //
-            // // check 
-            // var hits = Physics.OverlapBox(furthestPoint, _characterBounds.size, transform.rotation);
-            // if (!(hits?.Length > 0)) {
-            //     _rigidbody.MovePosition(furthestPoint);
-            //     return;
-            // }
-            //
-            // var posToMoveTo = pos;
-            // for (int i = 1; i < _freeColliderIterations; i++) {
-            //     var t = (float) i / _freeColliderIterations;
-            //     var posToTry = Vector3.Lerp(pos, furthestPoint, t);
-            //
-            //     if (Physics.OverlapBox(furthestPoint, _characterBounds.size, transform.rotation)?.Length > 0)
-            //         return;
-            //
-            //     posToMoveTo = posToTry;
-            // }
-            //
-            // _rigidbody.MovePosition(posToMoveTo);
 
             _rigidbody.MovePosition(furthestPoint);
         }
@@ -352,7 +342,7 @@ namespace Game._Scripts.Sassy
             var move = _currentDirection * clampedSpeed * Time.deltaTime;
             Gizmos.DrawWireCube(transform.position + move, _characterBounds.size);
         }
-        
+
         void SetPlayerState(PlayerStates newPlayerState, string animState) {
             _animator.Play(animState);
             _playerState = newPlayerState;
