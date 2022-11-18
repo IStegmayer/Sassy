@@ -23,7 +23,6 @@ namespace Game._Scripts.Sassy
         private Rigidbody _rigidbody;
         private Animator _animator;
         private float _scale = Constants.BASE_SCALE;
-        private bool _collided;
         private int _id;
         private Vector3 _lastPosition;
 
@@ -117,16 +116,34 @@ namespace Game._Scripts.Sassy
 
         #region Collisions
 
-        [Header("COLLISION")] [SerializeField]
-        private Bounds _characterBounds;
+        [Header("COLLISION")] [SerializeField] private Bounds _characterBounds;
+        private bool _collidedThisFrame;
+        private bool _isColliding;
+        private float _collisionDirX;
+        private float _collisionDirZ;
+        private Vector3 _collisionNormal;
 
         private void OnCollisionEnter(Collision collision) {
-            _collided = true;
+            _collidedThisFrame = true;
+            _isColliding = true;
+
+            _collisionNormal = collision.GetContact(0).normal;
+            if (_collisionNormal.x < 0.1f && _collisionNormal.x > -0.1f) _collisionDirX = 1f;
+            else _collisionDirX = -1f;
+            if (_collisionNormal.z < 0.1f && _collisionNormal.z > -0.1f) _collisionDirZ = 1f;
+            else _collisionDirZ = -1f;
+        }
+
+        private void OnCollisionStay(Collision collisionInfo) {
+            _collidedThisFrame = false;
         }
 
         private void OnCollisionExit(Collision collision) {
+            _collisionDirX = 1f;
+            _collisionDirZ = 1f;
             _ricocheting = false;
-            _collided = false;
+            _collidedThisFrame = false;
+            _isColliding = false;
         }
 
         #endregion
@@ -137,11 +154,15 @@ namespace Game._Scripts.Sassy
 
         private void Crash() {
             if (_playerState != PlayerStates.Stunned) return;
+            if (_collidedThisFrame) {
+                _currentDirection.x *= _collisionDirX;
+                _currentDirection.z *= _collisionDirZ;
+            }
 
             if (_crashed) StartCoroutine(RestartCrash());
 
             if (_currentSpeed >= 0.0f)
-                _currentSpeed = Mathf.MoveTowards(_currentSpeed, 0, _drag * Time.deltaTime);
+                _currentSpeed -= _drag * Time.deltaTime;
         }
 
         private IEnumerator RestartCrash() {
@@ -213,10 +234,11 @@ namespace Game._Scripts.Sassy
         void Launch() {
             if (_playerState != PlayerStates.Launching) return;
 
-            if (_collided) {
+            if (_collidedThisFrame) {
                 // we crashed
                 _crashed = true;
-                _currentDirection *= -1.0f;
+                _currentDirection.x *= _collisionDirX;
+                _currentDirection.z *= _collisionDirZ;
                 _currentSpeed = 3.0f * Time.deltaTime;
                 AudioSystem.Instance.PlaySound("crash", transform.position);
                 SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
@@ -227,7 +249,7 @@ namespace Game._Scripts.Sassy
             if (_input.WindSlash && _canWindSlash) StartCoroutine(ExecuteWindSlash());
 
             if (_currentSpeed > 0.0f) {
-                _currentSpeed = Mathf.MoveTowards(_currentSpeed, 0, _drag * Time.deltaTime);
+                _currentSpeed -= _drag * Time.deltaTime;
             }
             else {
                 _canWindSlash = true;
@@ -243,8 +265,7 @@ namespace Game._Scripts.Sassy
 
         #region WindSlash
 
-        [Header("WINDSLASH")] 
-        [SerializeField] private float _windSlashDuration;
+        [Header("WINDSLASH")] [SerializeField] private float _windSlashDuration;
         [SerializeField] private float _ricoBoost;
         private bool _canWindSlash;
 
@@ -252,10 +273,11 @@ namespace Game._Scripts.Sassy
             if (_playerState != PlayerStates.Slashing) return;
 
             // if we collided, ricochet
-            if (_collided && !_ricocheting) {
+            if (_collidedThisFrame && !_ricocheting) {
                 _canWindSlash = true;
                 _ricocheting = true;
-                _currentDirection *= -1.0f;
+                _currentDirection.x *= _collisionDirX;
+                _currentDirection.z *= _collisionDirZ;
                 _currentSpeed += _ricoBoost * Time.deltaTime;
                 AudioSystem.Instance.PlaySound("good", transform.position);
             }
@@ -279,6 +301,7 @@ namespace Game._Scripts.Sassy
 
         private void Walk() {
             if (!(_playerState == PlayerStates.Idle || _playerState == PlayerStates.Walking)) return;
+            if (_playerState == PlayerStates.Idle) _currentSpeed = 0f;
 
             // start charge
             if (_input.ChargeDown) {
@@ -286,7 +309,8 @@ namespace Game._Scripts.Sassy
                 return;
             }
 
-            if (!_collided) {
+            _currentSpeed = _speed * Time.deltaTime;
+            if (!_isColliding) {
                 // we pass x first so we get a clockwise rotation
                 float targetAngle = Mathf.Atan2(_input.MovementXZ.x, _input.MovementXZ.y) * Mathf.Rad2Deg;
                 float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref _turnSmoothVelocity,
@@ -295,15 +319,11 @@ namespace Game._Scripts.Sassy
 
                 _currentDirection.x = _input.MovementXZ.x;
                 _currentDirection.z = _input.MovementXZ.y;
-                _currentSpeed = _speed * Time.deltaTime;
                 SetPlayerState(PlayerStates.Walking, AnimStates.walking);
             }
-            // TODO: this can be vastly improved but works for now
             else {
-                var backwards = -transform.forward;
-                _currentDirection.x = backwards.x;
-                _currentDirection.z = backwards.z;
-                _currentSpeed = 1.001f * Time.deltaTime;
+                _currentDirection.x = _collisionNormal.x;
+                _currentDirection.z = _collisionNormal.z;
             }
         }
 
@@ -314,6 +334,7 @@ namespace Game._Scripts.Sassy
         [Header("MOVE")]
         [SerializeField, Tooltip("Raising this value increases collision accuracy at the cost of performance.")]
         private int _freeColliderIterations = 10;
+
         [SerializeField] private float _maxSpeed;
 
         // This function is only executing the sum of movement, the idea would be to check for collisions manually
