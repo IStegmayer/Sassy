@@ -162,7 +162,7 @@ namespace Game._Scripts.Sassy
             if (_crashed) StartCoroutine(RestartCrash());
 
             if (_currentSpeed >= 0.0f)
-                _currentSpeed -= _drag * Time.deltaTime;
+                _currentSpeed -= _drag;
         }
 
         private IEnumerator RestartCrash() {
@@ -193,7 +193,7 @@ namespace Game._Scripts.Sassy
                 }
 
                 _startChargeTime = 0.0f;
-                _currentSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed * Time.deltaTime;
+                _currentSpeed = (_chargeTime / _maxChargeTime) * _maxLaunchSpeed;
                 _currentDirection.x = _input.MovementXZ.x;
                 _currentDirection.z = _input.MovementXZ.y;
                 _canWindSlash = true;
@@ -203,11 +203,8 @@ namespace Game._Scripts.Sassy
             // keep up with scale and rotation of charge
             else {
                 if (_input.MovementXZ.magnitude >= 0.1f) {
-                    // we pass x first so we get a clockwise rotation
-                    float targetAngle = Mathf.Atan2(_input.MovementXZ.x, _input.MovementXZ.y) * Mathf.Rad2Deg;
-                    float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref _turnSmoothVelocity,
-                        _turnSmoothTime);
-                    _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
+                    _currentDirection.x = _input.MovementXZ.x;
+                    _currentDirection.z = _input.MovementXZ.y;
                 }
 
                 if (0.07f < _scale) {
@@ -239,7 +236,7 @@ namespace Game._Scripts.Sassy
                 _crashed = true;
                 _currentDirection.x *= _collisionDirX;
                 _currentDirection.z *= _collisionDirZ;
-                _currentSpeed = 3.0f * Time.deltaTime;
+                _currentSpeed = 3.0f;
                 AudioSystem.Instance.PlaySound("crash", transform.position);
                 SetPlayerState(PlayerStates.Stunned, AnimStates.stunned);
                 return;
@@ -249,7 +246,7 @@ namespace Game._Scripts.Sassy
             if (_input.WindSlash && _canWindSlash) StartCoroutine(ExecuteWindSlash());
 
             if (_currentSpeed > 0.0f) {
-                _currentSpeed -= _drag * Time.deltaTime;
+                _currentSpeed -= _drag;
             }
             else {
                 _canWindSlash = true;
@@ -278,7 +275,7 @@ namespace Game._Scripts.Sassy
                 _ricocheting = true;
                 _currentDirection.x *= _collisionDirX;
                 _currentDirection.z *= _collisionDirZ;
-                _currentSpeed += _ricoBoost * Time.deltaTime;
+                _currentSpeed += _ricoBoost;
                 AudioSystem.Instance.PlaySound("good", transform.position);
             }
         }
@@ -301,7 +298,7 @@ namespace Game._Scripts.Sassy
 
         private void Walk() {
             if (!(_playerState == PlayerStates.Idle || _playerState == PlayerStates.Walking)) return;
-            if (_playerState == PlayerStates.Idle) _currentSpeed = 0f;
+            // if (_playerState == PlayerStates.Idle) _currentSpeed = 0f;
 
             // start charge
             if (_input.ChargeDown) {
@@ -309,17 +306,19 @@ namespace Game._Scripts.Sassy
                 return;
             }
 
-            _currentSpeed = _speed * Time.deltaTime;
-            if (!_isColliding) {
-                // we pass x first so we get a clockwise rotation
-                float targetAngle = Mathf.Atan2(_input.MovementXZ.x, _input.MovementXZ.y) * Mathf.Rad2Deg;
-                float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref _turnSmoothVelocity,
-                    _turnSmoothTime);
-                _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
+            // no movement
+            if (_input.MovementXZ.magnitude < 0.1f) {
+                _currentSpeed = 0f;
+                return;
+            }
 
+            // move
+            _currentSpeed = _speed;
+            SetPlayerState(PlayerStates.Walking, AnimStates.walking);
+            
+            if (!_isColliding) {
                 _currentDirection.x = _input.MovementXZ.x;
                 _currentDirection.z = _input.MovementXZ.y;
-                SetPlayerState(PlayerStates.Walking, AnimStates.walking);
             }
             else {
                 _currentDirection.x = _collisionNormal.x;
@@ -341,11 +340,17 @@ namespace Game._Scripts.Sassy
         // iterating through small steps for better accuracy. We're using OnCollisionEnter for now.
         private void MoveSassy() {
             var pos = transform.position;
-            var clampedSpeed = Mathf.Clamp(_currentSpeed, 0.0f, _maxSpeed);
-            var move = _currentDirection * clampedSpeed;
-            var furthestPoint = pos + move;
 
+            var clampedSpeed = Mathf.Clamp(_currentSpeed, 0.0f, _maxSpeed);
+            var move = _currentDirection * clampedSpeed * Time.deltaTime;
+            var furthestPoint = pos + move;
             _rigidbody.MovePosition(furthestPoint);
+
+            // we pass x first so we get a clockwise rotation
+            float targetAngle = Mathf.Atan2(_currentDirection.x, _currentDirection.z) * Mathf.Rad2Deg;
+            float angle = Mathf.SmoothDampAngle(transform.eulerAngles.y, targetAngle, ref _turnSmoothVelocity,
+                _turnSmoothTime);
+            _rigidbody.MoveRotation(Quaternion.Euler(0f, angle, 0f));
         }
 
         #endregion
